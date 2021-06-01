@@ -1,9 +1,15 @@
+#!/usr/bin/env python3
+# coding=utf-8
+
 import requests
 from bs4 import BeautifulSoup as bs4
 import time
 import os
 import json
 import re
+from pyfzf.pyfzf import FzfPrompt
+
+fzf = FzfPrompt()
 
 def watchMovie(url,subtitle):
     if subtitle == "":
@@ -14,24 +20,13 @@ def watchMovie(url,subtitle):
 
 def chooseQuality(urls,subtitle):
     allQuality = re.findall(r'\[(\w*)\]', urls)
-    for quality in allQuality:
-        print(f'>> {allQuality.index(quality)}) {quality}')
-    try:
-        choose = int(input('Выберите качество фильма/серии: '))
-    except:
-        pass
+    choose = allQuality.index(fzf.prompt(allQuality)[0])
     url = re.findall(r'\[\w*\](\S*):hls', urls)[choose]
-    print(url)
     watchMovie(url,subtitle)
 
 def getSubtitles(subtitles):
     languages = re.findall(r"\[(\w*)\]",subtitles)
-    for language in languages:
-        print(f'>> {languages.index(language)}) {language}')
-    try:
-        choose = int(input('Выберите язык субтитров: '))
-    except:
-        getSubtitles(subtitles)
+    choose = languages.index(fzf.prompt(languages))[0]
     subtitleUrls = re.findall(r"\[\w*\](\S*)", subtitles.replace(',', ' '))
     return subtitleUrls[choose]
     
@@ -75,20 +70,16 @@ def getEpisodes(filmId, translatorId):
     else:
         parse = bs4(data['seasons'], 'lxml')
         allSeasons = parse.findAll('li')
+        seasons = []
         for season in allSeasons:
-            print(f'>> {allSeasons.index(season)}) {season.text}')
-        try:
-            season = int(input('Выберите сезон: '))
-        except:
-            getEpisodes(filmId, translatorId)
+            seasons.append(season.text)
+        season = seasons.index(fzf.prompt(seasons)[0])
         parse = bs4(data['episodes'], 'lxml')
         allEpisodes = parse.findAll('li', {'data-season_id' : str(season+1)})
+        episodes = []
         for episode in allEpisodes:
-            print(f'>> {allEpisodes.index(episode)}) {episode.text}')
-        try:
-            episode = int(input('Выберите эпизод: '))
-        except:
-            getEpisodes(filmId, translatorId)
+            episodes.append(episode.text)
+        episode = episodes.index(fzf.prompt(episodes)[0])
         getEpisodeUrls(season, episode, translatorId, filmId)
 
 
@@ -99,22 +90,17 @@ def chooseTranslators(url):
     allTranslators = html.findAll('li', class_='b-translator__item')
     if allTranslators != []:
         allId = []
+        names = []
         for translator in allTranslators:
             allId.append(translator['data-translator_id'])
             name = translator.text
-            language = ""
             try:
-                language = '(' + translator.find('img')['title'] + ')'
+                name += ' (' + translator.find('img')['title'] + ')'
             except:
                 pass
-            print(f">> {allTranslators.index(translator)}) {name} {language}")
-        try:
-            choose = int(input('Выберите озвучку: '))
-            getEpisodes(filmId, allId[choose])
-        except Exception as E:
-            print(E)
-            print('Что-то не так...')
-            chooseTranslators(url)
+            names.append(name)
+        choose = fzf.prompt(names)[0]
+        getEpisodes(filmId, allId[names.index(choose)])
     else:
         try:
             translatorId = re.findall(r'SeriesEvents\(\d*,(\d*)', response.text)[0]
@@ -125,21 +111,15 @@ def chooseTranslators(url):
 
 def choose(allFilms):
     urls = []
-    types = []
+    names = []
     for film in allFilms:
         name = film.find('div', class_='b-content__inline_item-link').text
         url = film.find('a', href=True)['href']
         type = film.find('i', class_='entity').text
         urls.append(url)
-        types.append(type)
-        print(f'>> {allFilms.index(film)}) {name} {" "*(50-len(name))} {type} ')
-    try:
-        userInput = int(input('Введите номер нужного вам фильма/сериала: '))
-        chooseTranslators(urls[userInput])
-    except Exception as E:
-        print(E)
-        print('Повторите попытку')
-        choose(allFilms)
+        names.append(name)
+    choose = fzf.prompt(names)[0]
+    chooseTranslators(urls[names.index(choose)])
 
 def search(query):
     response = requests.get('https://rezka.ag/search/?do=search&subaction=search&q=' + query)
