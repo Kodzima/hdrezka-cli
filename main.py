@@ -26,7 +26,7 @@ def chooseQuality(urls,subtitle):
 
 def getSubtitles(subtitles):
     languages = re.findall(r"\[(\w*)\]",subtitles)
-    choose = languages.index(fzf.prompt(languages))[0]
+    choose = languages.index(fzf.prompt(languages)[0])
     subtitleUrls = re.findall(r"\[\w*\](\S*)", subtitles.replace(',', ' '))
     return subtitleUrls[choose]
     
