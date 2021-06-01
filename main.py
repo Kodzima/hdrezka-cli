@@ -68,7 +68,7 @@ def getEpisodes(filmId, translatorId):
                 }
         response = requests.post('https://rezka.ag/ajax/get_cdn_series/?t=' + str(time.time()), data=payload)
         data = json.loads(response.content)
-        subtitle = ""
+        subtitleUrl = ""
         if data['subtitle']:
             subtitleUrl = getSubtitles(data['subtitle'])
         chooseQuality(data['url'], subtitleUrl)
