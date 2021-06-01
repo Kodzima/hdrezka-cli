@@ -3,27 +3,38 @@ from bs4 import BeautifulSoup as bs4
 import time
 import os
 import json
+import re
 
-def watchMovie(url):
-    os.system(f'mpv {url}')
+def watchMovie(url,subtitle):
+    if subtitle == "":
+        os.system(f'mpv {url}')
+    else:
+        os.system(f'mpv {url} --sub-file={subtitle}')
 
-def chooseQuality(urls):
-    allQuality = ['360p', '480p', '720p', '1080p', '1080p Ultra']
-    i = 0
+
+def chooseQuality(urls,subtitle):
+    allQuality = re.findall(r'\[(\w*)\]', urls)
     for quality in allQuality:
-        if quality in urls:
-            print(f'>> {i}) {quality}')
-            i += 1
-        else:
-            allQuality.remove(quality)
+        print(f'>> {allQuality.index(quality)}) {quality}')
     try:
         choose = int(input('Выберите качество фильма/серии: '))
     except:
         pass
-    start = urls.find(allQuality[choose]) + len(allQuality[choose]) + 1
-    end = urls.find(':hls', start)
-    url = urls[start : end]
-    watchMovie(url)
+    url = re.findall(r'\[\w*\](\S*):hls', urls)[choose]
+    print(url)
+    watchMovie(url,subtitle)
+
+def getSubtitles(subtitles):
+    languages = re.findall(r"\[(\w*)\]",subtitles)
+    for language in languages:
+        print(f'>> {languages.index(language)}) {language}')
+    try:
+        choose = int(input('Выберите язык субтитров: '))
+    except:
+        getSubtitles(subtitles)
+    subtitleUrls = re.findall(r"\[\w*\](\S*)", subtitles.replace(',', ' '))
+    return subtitleUrls[choose]
+    
 
 def getEpisodeUrls(season, episode, translatorId, filmId):
     payload = {
@@ -34,7 +45,12 @@ def getEpisodeUrls(season, episode, translatorId, filmId):
             'action' : 'get_stream'
             }
     response = requests.post('https://rezka.ag/ajax/get_cdn_series/?t=' + str(int(time.time()*1000)), data=payload)
-    chooseQuality(json.loads(response.content)['url'])
+    subtitle = ""
+    data = json.loads(response.content)
+    if data['subtitle']:
+        subtitle = getSubtitles(data['subtitle'])
+    chooseQuality(data['url'],subtitle)
+
 
 def getEpisodes(filmId, translatorId):
     payload = {
@@ -52,7 +68,10 @@ def getEpisodes(filmId, translatorId):
                 }
         response = requests.post('https://rezka.ag/ajax/get_cdn_series/?t=' + str(time.time()), data=payload)
         data = json.loads(response.content)
-        chooseQuality(data['url'])
+        subtitle = ""
+        if data['subtitle']:
+            subtitleUrl = getSubtitles(data['subtitle'])
+        chooseQuality(data['url'], subtitleUrl)
     else:
         parse = bs4(data['seasons'], 'lxml')
         allSeasons = parse.findAll('li')
@@ -74,9 +93,7 @@ def getEpisodes(filmId, translatorId):
 
 
 def chooseTranslators(url):
-    start = url.rfind('/') + 1
-    end = url.find('-')
-    filmId = url[start : end]
+    filmId = re.findall(r'/(\w*)-', url)[0]
     response = requests.get(url)
     html = bs4(response.content, 'lxml')
     allTranslators = html.findAll('li', class_='b-translator__item')
@@ -95,17 +112,15 @@ def chooseTranslators(url):
             choose = int(input('Выберите озвучку: '))
             getEpisodes(filmId, allId[choose])
         except Exception as E:
+            print(E)
             print('Что-то не так...')
             chooseTranslators(url)
     else:
-        start = response.text.find('SeriesEvents(') + 14 + len(filmId)
-        altStart = response.text.find('MoviesEvents(') + 14 + len(filmId)
-        if start < altStart:
-            start = altStart
-        end = response.text.find(',', start)
-        translatorId = response.text[start: end]
+        try:
+            translatorId = re.findall(r'SeriesEvents\(\d*,(\d*)', response.text)[0]
+        except:
+            translatorId = re.findall(r'MoviesEvents\(\d*, (\d*)', response.text)[0]
         getEpisodes(filmId, translatorId)
-
 
 
 def choose(allFilms):
@@ -131,8 +146,6 @@ def search(query):
     html = bs4(response.content, 'lxml')
     allFilms = html.findAll('div', class_='b-content__inline_item')
     choose(allFilms)
-
-
 
 if __name__ == '__main__':
     query = input('Введите название фильма/сериала, который будете смотреть: ').replace(' ', '+')
